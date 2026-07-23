@@ -1,4 +1,4 @@
-# Type Proof
+# Font Proof
 
 Paste text, drop two fonts, compare. No build step, no dependencies.
 

@@ -50,6 +50,7 @@ const slots = ['A', 'B'].map((id) => {
       describe(entry, file, result.meta);
       entry.axisValues = seedAxes(result.meta);
       buildAxisPanel();
+      flagSharedNames();
       paint();
     } catch (err) {
       entry.nameEl.textContent = file.name;
@@ -80,6 +81,30 @@ function describe(entry, file, meta) {
   if (meta?.compressed) bits.push('compressed container — metadata unread');
   bits.push(`${Math.round(file.size / 1024)} kB`);
   entry.metaEl.textContent = bits.join(' · ');
+}
+
+/**
+ * The CSS family registered for each slot is always unique (see fontSlot.mjs
+ * — Proof_A_n / Proof_B_n), so identical internal names never cause one
+ * font to silently render as the other. This is purely an FYI for the
+ * person testing: if both files report the same family/fullName, it's easy
+ * to mistake "two builds of one typeface" for "I dropped the same file
+ * twice", so surface it rather than let the header text alone imply that.
+ */
+function flagSharedNames() {
+  const [a, b] = slots;
+  for (const entry of slots) entry.metaEl.title = '';
+
+  const nameOf = (e) => e.slot.meta?.names?.fullName || e.slot.meta?.names?.family || null;
+  const nameA = nameOf(a);
+  const nameB = nameOf(b);
+
+  if (nameA && nameB && nameA === nameB) {
+    const note = ` · shares internal name "${nameA}" with the other slot — rendering independently`;
+    a.metaEl.textContent += note;
+    b.metaEl.textContent += note;
+    a.metaEl.title = b.metaEl.title = 'Same font name table entry in both files. Each is still registered under its own generated CSS family and rendered independently.';
+  }
 }
 
 function seedAxes(meta) {
