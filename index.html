@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Type Proof — two-font comparison</title>
+<link rel="stylesheet" href="./css/app.css">
+</head>
+<body>
+
+<header class="bar">
+  <h1 class="wordmark">Type&nbsp;Proof</h1>
+  <div class="bar-controls">
+    <div class="seg" role="group" aria-label="Layout">
+      <button type="button" class="seg-btn is-on" data-layout="split">Split</button>
+      <button type="button" class="seg-btn" data-layout="stack">Stack</button>
+      <button type="button" class="seg-btn" data-layout="overlay">Overlay</button>
+    </div>
+    <label class="check"><input type="checkbox" id="syncScroll" checked> Sync scroll</label>
+    <button type="button" class="ghost" id="toggleSource">Edit text</button>
+    <button type="button" class="ghost" id="toggleSettings">Settings</button>
+  </div>
+</header>
+
+<main class="stage" id="stage" data-layout="split">
+
+  <section class="pane" data-slot="A">
+    <div class="slot-head">
+      <span class="chip">A</span>
+      <span class="slot-name" data-field="name">Drop a .ttf / .otf here</span>
+      <span class="slot-meta" data-field="meta"></span>
+      <label class="filebtn">
+        Choose…
+        <input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" data-field="file" hidden>
+      </label>
+    </div>
+    <div class="proof" data-field="proof" tabindex="0"></div>
+    <div class="dropveil" data-field="veil"><span>Release to load into&nbsp;A</span></div>
+  </section>
+
+  <section class="pane" data-slot="B">
+    <div class="slot-head">
+      <span class="chip chip-b">B</span>
+      <span class="slot-name" data-field="name">Drop a .ttf / .otf here</span>
+      <span class="slot-meta" data-field="meta"></span>
+      <label class="filebtn">
+        Choose…
+        <input type="file" accept=".ttf,.otf,.woff,.woff2,font/*" data-field="file" hidden>
+      </label>
+    </div>
+    <div class="proof" data-field="proof" tabindex="0"></div>
+    <div class="dropveil" data-field="veil"><span>Release to load into&nbsp;B</span></div>
+  </section>
+
+</main>
+
+<aside class="drawer" id="sourceDrawer" hidden>
+  <div class="drawer-head">
+    <h2>Proof text</h2>
+    <div class="seg" role="group" aria-label="Input format">
+      <button type="button" class="seg-btn is-on" data-format="text">Plain</button>
+      <button type="button" class="seg-btn" data-format="markdown">Markdown</button>
+      <button type="button" class="seg-btn" data-format="html">HTML</button>
+    </div>
+    <button type="button" class="ghost" data-close="sourceDrawer">Close</button>
+  </div>
+  <textarea id="source" spellcheck="false" aria-label="Proof text"></textarea>
+  <p class="hint" id="sanitizeNote"></p>
+</aside>
+
+<aside class="drawer drawer-right" id="settingsDrawer" hidden>
+  <div class="drawer-head">
+    <h2>Rendering</h2>
+    <button type="button" class="ghost" id="resetSettings">Reset</button>
+    <button type="button" class="ghost" data-close="settingsDrawer">Close</button>
+  </div>
+  <div class="controls" id="controls"></div>
+  <div class="axes" id="axes"></div>
+  <div class="coverage" id="coverage"></div>
+</aside>
+
+<script type="module" src="./js/main.mjs"></script>
+</body>
+</html>
