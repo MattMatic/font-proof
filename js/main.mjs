@@ -6,6 +6,7 @@ import { FontSlot, attachDropTarget, guardWindowDrops } from './fontSlot.mjs';
 import { render as renderContent } from './content.mjs';
 import { buildControls, applyState, applyAxes, defaults } from './controls.mjs';
 import { analyse, highlight, codePointLabel } from './coverage.mjs';
+import { sizeForTarget, ascentPx, looksUnconventional } from './metrics.mjs';
 
 const DEFAULT_TEXT = `Hamburgefonstiv — AVATAR Wave Toy Yjar
 Waltz, bad nymph, for quick jigs vex. 0123456789
@@ -80,7 +81,20 @@ function describe(entry, file, meta) {
   if (meta?.axes) bits.push(`${Object.keys(meta.axes).length} axes`);
   if (meta?.compressed) bits.push('compressed container — metadata unread');
   bits.push(`${Math.round(file.size / 1024)} kB`);
-  entry.metaEl.textContent = bits.join(' · ');
+
+  // Stored, not written directly: paint() runs on every keystroke and every
+  // control change, and both the shared-name note and the size-match note
+  // below need to be recomputed each time rather than appended on top of
+  // whatever was there before.
+  entry.baseMeta = bits.join(' · ');
+  entry.metaEl.textContent = entry.baseMeta;
+}
+
+/** Rebuild the slot-header line from its parts. Safe to call every paint(). */
+function refreshMeta(entry, extraNotes = []) {
+  entry.metaEl.classList.remove('is-warn');
+  const parts = [entry.baseMeta, entry.sharedNameNote, ...extraNotes].filter(Boolean);
+  entry.metaEl.textContent = parts.join(' · ');
 }
 
 /**
@@ -93,17 +107,16 @@ function describe(entry, file, meta) {
  */
 function flagSharedNames() {
   const [a, b] = slots;
-  for (const entry of slots) entry.metaEl.title = '';
+  for (const entry of slots) { entry.metaEl.title = ''; entry.sharedNameNote = ''; }
 
   const nameOf = (e) => e.slot.meta?.names?.fullName || e.slot.meta?.names?.family || null;
   const nameA = nameOf(a);
   const nameB = nameOf(b);
 
   if (nameA && nameB && nameA === nameB) {
-    const note = ` · shares internal name "${nameA}" with the other slot — rendering independently`;
-    a.metaEl.textContent += note;
-    b.metaEl.textContent += note;
-    a.metaEl.title = b.metaEl.title = 'Same font name table entry in both files. Each is still registered under its own generated CSS family and rendered independently.';
+    a.sharedNameNote = b.sharedNameNote = `shares internal name "${nameA}" with the other slot — rendering independently`;
+    a.metaEl.title = b.metaEl.title =
+      'Same font name table entry in both files. Each is still registered under its own generated CSS family and rendered independently.';
   }
 }
 
@@ -243,12 +256,44 @@ function paint() {
   const plain = sourceEl.value;
   coverageEl.textContent = '';
 
-  for (const entry of slots) {
+  const sizeMode = state.sizeMode || 'em';
+  const targetPx = Number(state.size);
+
+  // Pass 1 — resolve each slot's own font-size in px. In 'em' mode that's
+  // just the literal Size value for both. In 'cap'/'x' mode, each slot gets
+  // whatever font-size makes ITS cap-height / x-height equal targetPx, so
+  // the two fonts land at the same rendered metric rather than the same em.
+  const resolved = slots.map((entry) => ({
+    entry,
+    ...sizeForTarget(entry.slot.meta, sizeMode, targetPx, entry.slot.family)
+  }));
+
+  // Pass 2 — resolve baseline offsets. Shift every slot down by however much
+  // less ascent it has than the tallest one, so the first line's baseline
+  // lands at the same y in every pane. This is only ever additive (never
+  // negative) so it can't clip content off the top of a pane.
+  const withAscent = resolved.map((r) => ({ ...r, ascent: ascentPx(r.entry.slot.meta, r.fontSizePx) }));
+  const knownAscents = withAscent.map((w) => w.ascent).filter((a) => a != null);
+  const commonAscent = knownAscents.length === withAscent.length ? Math.max(...knownAscents) : null;
+
+  // "Largest line spacing of the two fonts" = the current Line-height ratio
+  // applied to each font's own resolved size (not its em) — so this tracks
+  // whatever the Size/target control actually rendered, including when
+  // cap-height or x-height matching has pushed the two fonts to different
+  // font-sizes. Only body-text elements pick this up (see app.css); headings
+  // keep scaling their own leading against their own font-size as usual.
+  const ratio = Number(state.lineHeight) || 1;
+  const sharedLeadingPx = state.baselineAlign
+    ? Math.max(...withAscent.map((w) => ratio * w.fontSizePx))
+    : null;
+
+  for (const { entry, fontSizePx, source, ascent } of withAscent) {
     const overrides = overlay
       ? (entry.id === 'A'
           ? { ink: getVar('--slot-a') }
           : { ink: getVar('--slot-b'), paper: 'transparent' })
       : {};
+    overrides.size = fontSizePx;
 
     applyState(entry.proof, state, overrides);
     applyAxes(entry.proof, entry.axisValues);
@@ -257,11 +302,51 @@ function paint() {
       entry.slot.family ? `"${entry.slot.family}"` : 'sans-serif'
     );
 
-    entry.proof.textContent = '';
-    entry.proof.appendChild(fragment.cloneNode(true));
+    const auto = (state.baselineAlign && commonAscent != null && ascent != null)
+      ? commonAscent - ascent
+      : 0;
+    const nudge = Number(entry.id === 'A' ? state.nudgeA : state.nudgeB) || 0;
+    entry.proof.style.setProperty('--baseline-shift', `${Math.max(0, auto + nudge)}px`);
 
+    entry.proof.classList.toggle('is-aligned', !!state.baselineAlign);
+    if (sharedLeadingPx != null) entry.proof.style.setProperty('--shared-lh', `${sharedLeadingPx}px`);
+
+    entry.proof.textContent = '';
+    const wrap = document.createElement('div');
+    wrap.className = 'baseline-wrap';
+    wrap.appendChild(fragment.cloneNode(true));
+    entry.proof.appendChild(wrap);
+
+    reportSize(entry, sizeMode, fontSizePx, source, sharedLeadingPx);
     reportCoverage(entry, plain);
   }
+}
+
+function reportSize(entry, mode, fontSizePx, source, sharedLeadingPx) {
+  if (!entry.slot.family) return; // nothing loaded — leave the placeholder text alone
+
+  const notes = [];
+
+  if (mode !== 'em') {
+    const label = mode === 'cap' ? 'cap-height' : 'x-height';
+    const sourceText = {
+      table: 'from OS/2 table',
+      measured: 'measured from glyph outline — no OS/2 v2+ data',
+      assumed: 'assumed ratio — no data at all'
+    }[source];
+    notes.push(`${fontSizePx.toFixed(1)}px to match ${label} (${sourceText})`);
+
+    if (looksUnconventional(entry.slot.meta)) {
+      notes.push('unusually large vertical span — this ratio may not track visual size for stacking/diagonal scripts (e.g. Nastaliq)');
+    }
+  }
+
+  if (sharedLeadingPx != null) {
+    notes.push(`body line spacing locked to ${sharedLeadingPx.toFixed(1)}px (headings unaffected)`);
+  }
+
+  refreshMeta(entry, notes);
+  if (notes.some((n) => n.startsWith('unusually'))) entry.metaEl.classList.add('is-warn');
 }
 
 function reportCoverage(entry, plain) {

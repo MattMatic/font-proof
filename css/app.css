@@ -184,8 +184,22 @@ html, body {
   text-align: var(--align, start);
   -webkit-font-smoothing: var(--smooth, auto);
 }
-.proof > :first-child { margin-top: 0; }
-.proof > :last-child { margin-bottom: 0; }
+/* every paint() wraps the content in .baseline-wrap so a slot's rendered
+   text can be pushed down to meet a shared baseline without touching .proof
+   itself (which owns scroll position and padding) */
+.proof > .baseline-wrap { margin-top: var(--baseline-shift, 0px); }
+.proof > .baseline-wrap > :first-child { margin-top: 0; }
+.proof > .baseline-wrap > :last-child { margin-bottom: 0; }
+
+/* When "Align baselines" is on, body-text elements in both panes are locked
+   to the same literal px line-height (the larger of the two fonts' own
+   ratio-based leading), so line N's baseline lands at the same y in both
+   panes, not just line 1's. Headings are deliberately left alone: they keep
+   the default unitless --lh, which re-multiplies against their own larger
+   font-size as normal, so heading rhythm still scales with heading size. */
+.proof.is-aligned .baseline-wrap :is(p, li, dd, dt, blockquote, td, th) {
+  line-height: var(--shared-lh);
+}
 .proof img { max-width: 100%; }
 .proof table { border-collapse: collapse; }
 .proof td, .proof th { border: 1px solid currentColor; padding: 0.15em 0.4em; }
