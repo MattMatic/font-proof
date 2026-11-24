@@ -57,13 +57,18 @@ export class FontSlot extends EventTarget {
     // defeats any attempt to load two different files that share a real name.
     const family = `Proof_${this.id}_${++serial}`;
 
-    // Wide descriptor ranges so a variable font is driven by our controls
-    // rather than being clamped to a single instance. For a static font this
-    // is harmless: it just means the browser never looks for a sibling face.
+    // Variable font: declare the wght axis range so our controls drive it
+    // rather than the face being clamped to a single instance.
+    // Known static font: declare a single weight. A wide range here would tell
+    // the browser a real face exists at every weight, so it would never
+    // synthesise bold even when the Synthesis control allows it.
+    // Unknown (compressed WOFF/WOFF2, or peek failed): keep the wide range so a
+    // variable font still works; faux bold won't appear for a static one.
+    const isKnownStatic = meta && !meta.compressed && !meta.axes?.wght;
     const face = new FontFace(family, buffer, {
       weight: meta?.axes?.wght
         ? `${meta.axes.wght.min} ${meta.axes.wght.max}`
-        : '1 1000',
+        : isKnownStatic ? '400' : '1 1000',
       stretch: meta?.axes?.wdth
         ? `${meta.axes.wdth.min}% ${meta.axes.wdth.max}%`
         : '50% 200%',
